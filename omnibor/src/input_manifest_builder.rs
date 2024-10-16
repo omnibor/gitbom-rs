@@ -2,6 +2,9 @@ use crate::embedding::EmbeddingMode;
 use crate::embedding_mode::Mode;
 use crate::hashes::SupportedHash;
 use crate::storage::Storage;
+use crate::target_type::BinaryType;
+use crate::target_type::TargetType;
+use crate::target_type::TextType;
 use crate::ArtifactId;
 use crate::Error;
 use crate::InputManifest;
@@ -90,12 +93,22 @@ impl<H: SupportedHash, M: EmbeddingMode, S: Storage<H>> InputManifestBuilder<H, 
         // manifest ArtifactID into the target first.
         let target_aid = match embed_mode {
             Mode::Embed => {
-                let mut file = OpenOptions::new().read(true).write(true).open(target)?;
+                let mut file = OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .open(target)
+                    .map_err(|err| Error::CantOpenTargetForEditing {
+                        path: target.to_owned(),
+                        err,
+                    })?;
                 embed_manifest_in_target(target, &mut file, manifest_aid)?;
                 ArtifactId::id_reader(file)?
             }
             Mode::NoEmbed => {
-                let file = File::open(target)?;
+                let file = File::open(target).map_err(|err| Error::CantReadTarget {
+                    path: target.to_owned(),
+                    err,
+                })?;
                 ArtifactId::id_reader(file)?
             }
         };
@@ -162,7 +175,7 @@ fn embed_manifest_in_target<H: SupportedHash>(
     file: &mut File,
     manifest_aid: ArtifactId<H>,
 ) -> Result<ArtifactId<H>> {
-    match TargetType::infer(path, file) {
+    match TargetType::infer(path, file)? {
         TargetType::KnownBinaryType(BinaryType::ElfFile) => {
             embed_in_elf_file(path, file, manifest_aid)
         }
@@ -201,33 +214,6 @@ fn embed_in_text_file_with_wrapped_comment<H: SupportedHash>(
     _suffix: &str,
 ) -> Result<ArtifactId<H>> {
     todo!("embedding mode for text files is not yet implemented")
-}
-
-#[allow(unused)]
-#[derive(Debug)]
-enum TargetType {
-    KnownBinaryType(BinaryType),
-    KnownTextType(TextType),
-    Unknown,
-}
-
-impl TargetType {
-    fn infer(_path: &Path, _file: &File) -> Self {
-        todo!("inferring target file type is not yet implemented")
-    }
-}
-
-#[allow(unused)]
-#[derive(Debug)]
-enum BinaryType {
-    ElfFile,
-}
-
-#[allow(unused)]
-#[derive(Debug)]
-enum TextType {
-    PrefixComments { prefix: String },
-    WrappedComments { prefix: String, suffix: String },
 }
 
 #[cfg(test)]

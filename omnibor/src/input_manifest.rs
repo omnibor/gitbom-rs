@@ -84,7 +84,7 @@ impl<H: SupportedHash> InputManifest<H> {
 
     /// Construct an [`InputManifest`] from a file at a specified path.
     pub fn from_path(path: &Path) -> Result<Self> {
-        let file = BufReader::new(File::open(path)?);
+        let file = BufReader::new(File::open(path).map_err(Error::FailedManifestRead)?);
         let mut lines = file.lines();
 
         let first_line = lines
@@ -139,18 +139,20 @@ impl<H: SupportedHash> InputManifest<H> {
         // a manifest if they were written in full form. Instead, only the
         // hex-encoded hashes are recorded elsewhere, because all the metadata
         // is identical in a manifest and only recorded once at the beginning.
-        write!(bytes, "gitoid:{}:{}\n", Blob::NAME, H::HashAlgorithm::NAME)?;
+        write!(bytes, "gitoid:{}:{}\n", Blob::NAME, H::HashAlgorithm::NAME)
+            .map_err(Error::FailedManifestWrite)?;
 
         for relation in &self.relations {
             let aid = relation.artifact;
 
-            write!(bytes, "{} {}", relation.kind, aid.as_hex())?;
+            write!(bytes, "{} {}", relation.kind, aid.as_hex())
+                .map_err(Error::FailedManifestWrite)?;
 
             if let Some(mid) = relation.manifest {
-                write!(bytes, " bom {}", mid.as_hex())?;
+                write!(bytes, " bom {}", mid.as_hex()).map_err(Error::FailedManifestWrite)?;
             }
 
-            write!(bytes, "\n")?;
+            write!(bytes, "\n").map_err(Error::FailedManifestWrite)?;
         }
 
         Ok(bytes)

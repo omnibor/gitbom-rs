@@ -133,8 +133,12 @@ impl FileSystemStorage {
     /// This is just used for tests to ensure idempotency.
     #[cfg(test)]
     pub fn cleanup(self) -> Result<()> {
-        fs::remove_dir_all(&self.root)?;
-        fs::create_dir_all(&self.root)?;
+        fs::remove_dir_all(&self.root).map_err(|err| Error::CantCleanRoot {
+            path: self.root.clone(),
+            err,
+        })?;
+        fs::create_dir_all(&self.root)
+            .map_err(|err| Error::CantCreateObjectStoreDir(self.root.display().to_string(), err))?;
         Ok(())
     }
 
@@ -295,7 +299,8 @@ impl TargetIndex {
         let path = path.as_ref();
 
         if path.exists().not() {
-            File::create_new(path)?;
+            File::create_new(path)
+                .map_err(|err| Error::CantCreateTargetIndex(path.to_owned(), err))?;
         }
 
         Ok(TargetIndex {
@@ -417,7 +422,7 @@ impl<H: SupportedHash> TargetIndexUpsert<H> {
                 fs::remove_file(self.tempfile()).map_err(|e| {
                     Error::CantDeleteTargetIndexTemp(self.tempfile().display().to_string(), e)
                 })?;
-                return Err(e.into());
+                return Err(Error::CantUpsertTargetIndex(e));
             }
         }
 
@@ -426,7 +431,7 @@ impl<H: SupportedHash> TargetIndexUpsert<H> {
             fs::remove_dir(self.tempfile()).map_err(|e| {
                 Error::CantDeleteTargetIndexTemp(self.tempfile().display().to_string(), e)
             })?;
-            return Err(e.into());
+            return Err(Error::CantUpsertTargetIndex(e));
         }
 
         Ok(())

@@ -40,6 +40,8 @@ gitoid = { version = "0.8.0", path = "../gitoid", default-features = false, feat
     "std",
     "url",
 ] }
+hyperpolyglot = "0.1.7"
+infer = "0.16.0"
 pathbuf = "1.0.0"
 serde = { version = "1.0.197", optional = true }
 thiserror = "1.0.60"

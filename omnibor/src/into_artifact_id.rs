@@ -1,8 +1,8 @@
 use crate::supported_hash::SupportedHash;
-use crate::ArtifactId;
 #[cfg(doc)]
 use crate::InputManifestBuilder;
 use crate::Result;
+use crate::{ArtifactId, Error};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
@@ -24,7 +24,12 @@ impl<H: SupportedHash> IntoArtifactId<H> for ArtifactId<H> {
 
 impl<H: SupportedHash> IntoArtifactId<H> for &Path {
     fn into_artifact_id(self) -> Result<ArtifactId<H>> {
-        File::open(self)?.into_artifact_id()
+        File::open(self)
+            .map_err(|err| Error::CantReadTarget {
+                path: self.to_owned(),
+                err,
+            })?
+            .into_artifact_id()
     }
 }
 

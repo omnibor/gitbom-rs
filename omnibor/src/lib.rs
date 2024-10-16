@@ -59,6 +59,7 @@ mod input_manifest_builder;
 mod into_artifact_id;
 pub mod storage;
 mod supported_hash;
+mod target_type;
 
 #[cfg(test)]
 mod test;

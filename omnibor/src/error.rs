@@ -4,6 +4,7 @@ use crate::ArtifactId;
 use crate::InputManifest;
 use gitoid::Error as GitOidError;
 use std::io::Error as IoError;
+use std::path::PathBuf;
 use std::result::Result as StdResult;
 use url::ParseError as UrlError;
 
@@ -33,6 +34,9 @@ pub enum Error {
     #[error("can't write manifest directory '{0}'")]
     CantWriteManifestDir(String, #[source] IoError),
 
+    #[error("can't create target index '{0}'")]
+    CantCreateTargetIndex(PathBuf, #[source] IoError),
+
     #[error("can't open target index file '{0}'")]
     CantOpenTargetIndex(String, #[source] IoError),
 
@@ -56,6 +60,9 @@ pub enum Error {
 
     #[error("missing manifest_aid or target_aid from target index upsert operation")]
     InvalidTargetIndexUpsert,
+
+    #[error("can't upsert the target index")]
+    CantUpsertTargetIndex(#[source] IoError),
 
     #[error("invalid relation kind in input manifest: '{0}'")]
     InvalidRelationKind(String),
@@ -93,8 +100,38 @@ pub enum Error {
     #[error("unknown file type for manifest ID embedding")]
     UnknownEmbeddingTarget,
 
+    #[error("unable to detect a language for '{0}'")]
+    CantDetectLanguage(PathBuf),
+
+    #[error("detected a binary type not supported for embedding '{0}'")]
+    UnsupportedBinaryType(String),
+
     #[error("failed to read input manifest file")]
-    FailedManifestRead(#[from] IoError),
+    FailedManifestRead(#[source] IoError),
+
+    #[error("failed to write manifest file")]
+    FailedManifestWrite(#[source] IoError),
+
+    #[error("failed to open target artifact for editing")]
+    CantOpenTargetForEditing {
+        path: PathBuf,
+        #[source]
+        err: IoError,
+    },
+
+    #[error("failed to open target for reading")]
+    CantReadTarget {
+        path: PathBuf,
+        #[source]
+        err: IoError,
+    },
+
+    #[error("can't clean the object store root")]
+    CantCleanRoot {
+        path: PathBuf,
+        #[source]
+        err: IoError,
+    },
 
     #[error(transparent)]
     GitOid(#[from] GitOidError),
