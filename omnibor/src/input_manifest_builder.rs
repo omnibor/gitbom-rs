@@ -68,9 +68,12 @@ impl<H: SupportedHash, M: EmbeddingMode, S: Storage<H>> InputManifestBuilder<H, 
         Ok(self)
     }
 
-    /// Complete the transaction without updating the target artifact.
+    #[cfg(feature = "builtin_embedding")]
+    /// Build the input manifest with the built-in embedding.
+    ///
+    /// This method will try to detect the type of target being used.
     pub fn finish(&mut self, target: &Path) -> Result<TransactionIds<H>> {
-        Self::finish_with_optional_embedding(self, target, M::mode())
+        self.finish_with_optional_embedding(target, M::mode(), None)
     }
 
     /// Complete creation of a new [`InputManifest`], possibly embedding in the target.
@@ -82,6 +85,7 @@ impl<H: SupportedHash, M: EmbeddingMode, S: Storage<H>> InputManifestBuilder<H, 
         &mut self,
         target: &Path,
         embed_mode: Mode,
+        embed_fn: Option<CustomEmbedding<H>>,
     ) -> Result<TransactionIds<H>> {
         // Construct a new input manifest.
         let mut manifest = InputManifest::with_relations(self.relations.iter().cloned());
@@ -101,7 +105,10 @@ impl<H: SupportedHash, M: EmbeddingMode, S: Storage<H>> InputManifestBuilder<H, 
                         path: target.to_owned(),
                         err,
                     })?;
-                embed_manifest_in_target(target, &mut file, manifest_aid)?;
+
+                let embed_fn = embed_fn.unwrap_or(embed_manifest_in_target);
+                embed_fn(target, &mut file, manifest_aid)?;
+
                 ArtifactId::id_reader(file)?
             }
             Mode::NoEmbed => {
@@ -129,7 +136,18 @@ impl<H: SupportedHash, M: EmbeddingMode, S: Storage<H>> InputManifestBuilder<H, 
             manifest,
         })
     }
+
+    pub fn finish_with_custom_embedding(
+        &mut self,
+        target: &Path,
+        embed_fn: CustomEmbedding<H>,
+    ) -> Result<TransactionIds<H>> {
+        self.finish_with_optional_embedding(target, M::mode(), Some(embed_fn))
+    }
 }
+
+/// A custom embedding function.
+pub type CustomEmbedding<H> = fn(&Path, &mut File, ArtifactId<H>) -> Result<ArtifactId<H>>;
 
 pub struct TransactionIds<H: SupportedHash> {
     /// The ArtifactId of the target.

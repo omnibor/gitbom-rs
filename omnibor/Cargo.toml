@@ -40,8 +40,8 @@ gitoid = { version = "0.8.0", path = "../gitoid", default-features = false, feat
     "std",
     "url",
 ] }
-hyperpolyglot = "0.1.7"
-infer = "0.16.0"
+hyperpolyglot = { version = "0.1.7", optional = true }
+infer = { version = "0.16.0", optional = true }
 pathbuf = "1.0.0"
 serde = { version = "1.0.197", optional = true }
 thiserror = "1.0.60"
@@ -59,5 +59,21 @@ tokio-test = "0.4.3"
 
 [features]
 
+default = ["serde", "builtin_embedding"]
+
 # Support serde serialization and deserialization
 serde = ["dep:serde", "gitoid/serde"]
+
+# Infer embedding target type automatically.
+#
+# Use this if you general-purpose embedding without having to really think
+# about it. This uses the `hyperpolyglot` and `infer` crates to identify what
+# kind of file the target is when producing an input manifest, and then
+# (if the file type is supported) automatically performs the right kind of
+# embedding on that file.
+#
+# If you _know_ already what your target file types are, and can implement a
+# simpler target detection algorithm yourself, you can turn this feature off
+# and provide your own custom embedding function when producing an
+# `InputManifest`. This will help reduce the amount of code you're pulling in.
+builtin_embedding = ["dep:hyperpolyglot", "dep:infer"]
