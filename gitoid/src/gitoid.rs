@@ -101,11 +101,11 @@ where
 
     #[cfg(feature = "std")]
     /// Generate a `GitOid` from a reader, providing an expected length in bytes.
-    pub fn id_reader_with_length<R: Read>(
-        reader: R,
-        expected_length: usize,
-    ) -> Result<GitOid<H, O>> {
-        gitoid_from_buffer(H::new(), reader, expected_length)
+    pub fn id_reader_with_length<R>(reader: R, expected_length: usize) -> Result<GitOid<H, O>>
+    where
+        R: Read + Seek,
+    {
+        gitoid_from_reader(H::new(), reader, expected_length)
     }
 
     #[cfg(feature = "async")]
@@ -307,7 +307,7 @@ where
         // Deserialize self from the URL string.
         struct GitOidVisitor<H: HashAlgorithm, O: ObjectType>(PhantomData<H>, PhantomData<O>);
 
-        impl<'de, H: HashAlgorithm, O: ObjectType> Visitor<'de> for GitOidVisitor<H, O> {
+        impl<H: HashAlgorithm, O: ObjectType> Visitor<'_> for GitOidVisitor<H, O> {
             type Value = GitOid<H, O>;
 
             fn expecting(&self, formatter: &mut Formatter<'_>) -> FmtResult {
@@ -451,7 +451,7 @@ where
 
 #[cfg(feature = "std")]
 /// Generate a GitOid by reading from an arbitrary reader.
-fn gitoid_from_buffer<H, O, R>(
+fn gitoid_from_reader<H, O, R>(
     digester: H::Alg,
     reader: R,
     expected_read_length: usize,
@@ -459,11 +459,11 @@ fn gitoid_from_buffer<H, O, R>(
 where
     H: HashAlgorithm,
     O: ObjectType,
-    R: Read,
+    R: Read + Seek,
 {
     let expected_hash_length = <H::Alg as OutputSizeUser>::output_size();
     let (hash, amount_read) =
-        hash_from_buffer::<H::Alg, O, R>(digester, reader, expected_read_length)?;
+        hash_from_reader::<H::Alg, O, R>(digester, reader, expected_read_length)?;
 
     if amount_read != expected_read_length {
         return Err(Error::UnexpectedReadLength {
@@ -485,7 +485,6 @@ where
     })
 }
 
-#[cfg(not(feature = "std"))]
 /// Generate a GitOid from data in a buffer of bytes.
 fn gitoid_from_buffer<H, O>(
     digester: H::Alg,
@@ -552,12 +551,56 @@ impl<R: BufRead> ForEachChunk for R {
     }
 }
 
+fn dos_newline_boundary(char1: &u8, char2: &u8) -> bool {
+    ((*char1, *char2) == (b'\r', b'\n')).not()
+}
+
+fn digest_with_normalized_newlines<D>(buf: &[u8], digester: &mut D)
+where
+    D: Digest,
+{
+    for chunk in buf.chunk_by(dos_newline_boundary) {
+        if chunk.last() == Some(&b'\r') {
+            // Chunk without the carriage return at the end.
+            let chunk = &chunk[0..(chunk.len() - 1)];
+            digester.update(chunk);
+        } else {
+            digester.update(chunk);
+        }
+    }
+}
+
+fn num_dos_newlines_in_reader<R>(reader: R) -> Result<(usize, R)>
+where
+    R: Read + Seek,
+{
+    let mut buf_reader = BufReader::new(reader);
+
+    let mut total_dos_newlines = 0;
+
+    buf_reader.for_each_chunk(|buf| {
+        // The number of separators is the number of chunks minus one.
+        total_dos_newlines += buf.chunk_by(dos_newline_boundary).count() - 1
+    })?;
+
+    let mut reader = buf_reader.into_inner();
+
+    // Return to the start.
+    reader.seek(SeekFrom::Start(0))?;
+
+    Ok((total_dos_newlines, reader))
+}
+
+fn num_dos_newlines_in_buffer(buffer: &[u8]) -> usize {
+    buffer.windows(2).filter(|buf| buf == b"\r\n").count()
+}
+
 #[cfg(feature = "std")]
 /// Helper function which actually applies the [`GitOid`] construction rules.
 ///
 /// This function handles actually constructing the hash with the GitOID prefix,
 /// and delegates to a buffered reader for performance of the chunked reading.
-fn hash_from_buffer<D, O, R>(
+fn hash_from_reader<D, O, R>(
     mut digester: D,
     reader: R,
     expected_read_length: usize,
@@ -565,19 +608,27 @@ fn hash_from_buffer<D, O, R>(
 where
     D: Digest,
     O: ObjectType,
-    R: Read,
+    R: Read + Seek,
 {
+    let (dos_newlines, reader) = num_dos_newlines_in_reader(reader)?;
+    let adjusted_expected_read_length = expected_read_length - dos_newlines;
+
+    println!("header bytes: {}", adjusted_expected_read_length);
+
     digester.update(format_bytes!(
         b"{} {}\0",
         O::NAME.as_bytes(),
-        expected_read_length
+        adjusted_expected_read_length
     ));
-    let amount_read = BufReader::new(reader).for_each_chunk(|b| digester.update(b))?;
+
+    let amount_read = BufReader::new(reader)
+        .for_each_chunk(|b| digest_with_normalized_newlines(b, &mut digester))?;
+
     let hash = digester.finalize();
+
     Ok((hash, amount_read))
 }
 
-#[cfg(not(feature = "std"))]
 /// Helper function which actually applies the [`GitOid`] construction rules.
 ///
 /// This function handles actually constructing the hash with the GitOID prefix,
@@ -591,15 +642,18 @@ where
     D: Digest,
     O: ObjectType,
 {
-    // Manually write out the prefix
-    digester.update(O::NAME.as_bytes());
-    digester.update(b" ");
-    digester.update(expected_read_length.to_ne_bytes());
-    digester.update(b"\0");
+    let dos_newlines = num_dos_newlines_in_buffer(reader);
+    let adjusted_expected_read_length = expected_read_length - dos_newlines;
+
+    digester.update(format_bytes!(
+        b"{} {}\0",
+        O::NAME.as_bytes(),
+        adjusted_expected_read_length
+    ));
 
     // It's in memory, so we know the exact size up front.
     let amount_read = reader.len();
-    digester.update(reader);
+    digest_with_normalized_newlines(reader, &mut digester);
     let hash = digester.finalize();
     Ok((hash, amount_read))
 }

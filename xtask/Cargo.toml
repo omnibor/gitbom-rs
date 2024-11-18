@@ -20,4 +20,4 @@ semver = "1.0.22"
 serde = { version = "1.0.197", features = ["derive"] }
 toml = "0.8.10"
 which = "6.0.0"
-xshell = "0.2.5"
+xshell = "0.2.7"
