@@ -178,10 +178,10 @@ impl<H: SupportedHash> ArtifactId<H> {
     /// let id: ArtifactId<Sha256> = ArtifactId::id_reader_with_length(&file, 11).unwrap();
     /// println!("Artifact ID: {}", id);
     /// ```
-    pub fn id_reader_with_length<R: Read>(
-        reader: R,
-        expected_length: usize,
-    ) -> Result<ArtifactId<H>> {
+    pub fn id_reader_with_length<R>(reader: R, expected_length: usize) -> Result<ArtifactId<H>>
+    where
+        R: Read + Seek,
+    {
         let gitoid = GitOid::id_reader_with_length(reader, expected_length)?;
         Ok(ArtifactId::from_gitoid(gitoid))
     }

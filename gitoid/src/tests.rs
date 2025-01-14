@@ -110,6 +110,17 @@ fn generate_sha256_gitoid_from_async_buffer() -> Result<()> {
 
 #[cfg(all(feature = "sha256", feature = "rustcrypto"))]
 #[test]
+fn validate_newline_normalization() -> Result<()> {
+    let with_crlf = b"some\r\nstring\r\n";
+    let wout_crlf = b"some\nstring\n";
+    let with_crlf_gitoid = GitOid::<Sha256, Blob>::id_bytes(&with_crlf[..]);
+    let wout_crlf_gitoid = GitOid::<Sha256, Blob>::id_bytes(&wout_crlf[..]);
+    assert_eq!(with_crlf_gitoid, wout_crlf_gitoid);
+    Ok(())
+}
+
+#[cfg(all(feature = "sha256", feature = "rustcrypto"))]
+#[test]
 fn validate_uri() -> Result<()> {
     let content = b"hello world";
     let gitoid = GitOid::<Sha256, Blob>::id_bytes(content);

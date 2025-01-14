@@ -6,7 +6,6 @@ macro_rules! settings {
     ($block:expr) => {
         let mut settings = Settings::clone_current();
         settings.add_filter(r#"omnibor(?:\.exe)?"#, "omnibor");
-        settings.add_filter(r#"gitoid:blob:sha256:[a-f0-9]{64}"#, "<GITOID>");
         settings.bind(|| $block);
     };
 }

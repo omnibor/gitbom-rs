@@ -13,6 +13,6 @@ info:
 success: true
 exit_code: 0
 ----- stdout -----
-{"id":"<GITOID>","path":"tests/data/main.c"}
+{"id":"gitoid:blob:sha256:93561f4501717b4c4a2f3eb5776f03231d32ec2a1f709a611ad3d8dcf931dc1b","path":"tests/data/main.c"}
 
 ----- stderr -----
